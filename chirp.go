@@ -15,7 +15,7 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var params parameters
-	decoder := json.NewDecoder(r.Body)
+    decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&params); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error decoding JSON")
 		return
@@ -39,7 +39,7 @@ func replaceProfanities(text string) string {
 	}
 	textFields := strings.Fields(text)
 	for i, word := range textFields {
-        lowerWord := strings.ToLower(word)
+		lowerWord := strings.ToLower(word)
 		if v, ok := profanityMap[lowerWord]; ok {
 			textFields[i] = v
 		}
