@@ -11,17 +11,35 @@ import (
 	"github.com/google/uuid"
 )
 
+type chirp struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string    `json:"body"`
+	UserID    uuid.UUID `json:"user_id"`
+}
+
+func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
+    dbChirps, err := cfg.dbQueries.GetAllChirps(r.Context())
+    if err != nil {
+        log.Printf("Error querying all chirps from database: %s", err)
+        respondWithError(w, http.StatusInternalServerError, "Something went wrong")
+        return
+    }
+
+    var chirps []chirp
+    for _, dbChirp := range dbChirps {
+        chirp := convertDatabaseChirp(dbChirp)
+        chirps = append(chirps, chirp)
+    }
+
+	respondWithJson(w, http.StatusOK, chirps)
+}
+
 func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Body   string    `json:"body"`
 		UserId uuid.UUID `json:"user_id"`
-	}
-	type returnValues struct {
-		ID        uuid.UUID `json:"id"`
-		CreatedAt time.Time `json:"created_at"`
-		UpdatedAt time.Time `json:"updated_at"`
-		Body      string    `json:"body"`
-		UserID    uuid.UUID `json:"user_id"`
 	}
 
 	var params parameters
@@ -39,7 +57,7 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 	}
 
 	cleanedBody := replaceProfanities(params.Body)
-	chirp, err := cfg.dbQueries.CreateChirp(r.Context(), database.CreateChirpParams{
+	dbChirp, err := cfg.dbQueries.CreateChirp(r.Context(), database.CreateChirpParams{
 		UserID: params.UserId,
 		Body:   cleanedBody,
 	})
@@ -49,13 +67,8 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusInternalServerError, "Unable to create chirp")
 	}
 
-	respondWithJson(w, http.StatusCreated, returnValues{
-		ID:        chirp.ID,
-		CreatedAt: chirp.CreatedAt,
-		UpdatedAt: chirp.UpdatedAt,
-		Body:      chirp.Body,
-		UserID:    chirp.UserID,
-	})
+    chirp := convertDatabaseChirp(dbChirp)
+	respondWithJson(w, http.StatusCreated, chirp)
 }
 
 func replaceProfanities(text string) string {
@@ -72,4 +85,14 @@ func replaceProfanities(text string) string {
 		}
 	}
 	return strings.Join(textFields, " ")
+}
+
+func convertDatabaseChirp(dbChirp database.Chirp) chirp {
+    return chirp{
+		ID:        dbChirp.ID,
+		CreatedAt: dbChirp.CreatedAt,
+		UpdatedAt: dbChirp.UpdatedAt,
+		Body:      dbChirp.Body,
+		UserID:    dbChirp.UserID,
+	}
 }
