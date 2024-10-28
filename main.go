@@ -24,7 +24,7 @@ func main() {
 	dbURL := os.Getenv("DB_URL")
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
-		fmt.Errorf("Failed to connect to database: %s", err)
+        log.Printf("Failed to connect to database: %s", err)
 	}
 	dbQueries := database.New(db)
 	platform := os.Getenv("PLATFORM")
@@ -45,7 +45,8 @@ func main() {
 	mux.HandleFunc("POST /admin/reset", apiConfig.handlerReset)
 	mux.HandleFunc("POST /api/users", apiConfig.handlerCreateUser)
 	mux.HandleFunc("POST /api/chirps", apiConfig.handlerCreateChirp)
-	mux.HandleFunc("GET /api/chirps", apiConfig.handlerGetChirps)
+	mux.HandleFunc("GET /api/chirps", apiConfig.handlerGetAllChirps)
+    mux.HandleFunc("GET /api/chirps/{chirpID}", apiConfig.handlerGetChirp)
 
 	server := http.Server{
 		Addr:    ":" + port,

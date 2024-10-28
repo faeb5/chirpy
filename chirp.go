@@ -19,10 +19,28 @@ type chirp struct {
 	UserID    uuid.UUID `json:"user_id"`
 }
 
-func (cfg *apiConfig) handlerGetChirps(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
+    chirpId, err := uuid.Parse(r.PathValue("chirpID"))
+    if err != nil {
+        log.Print("Chirp not found")
+        respondWithError(w, http.StatusNotFound, "Chirp not found")
+        return
+    }
+
+    dbChirp, err := cfg.dbQueries.GetChirp(r.Context(), chirpId)
+    if err != nil {
+        log.Printf("Error fetching chirp from database: %s", err)
+        respondWithError(w, http.StatusInternalServerError, "Something went wrong")
+        return
+    }
+
+    respondWithJson(w, http.StatusOK, convertDatabaseChirp(dbChirp))
+}
+
+func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request) {
     dbChirps, err := cfg.dbQueries.GetAllChirps(r.Context())
     if err != nil {
-        log.Printf("Error querying all chirps from database: %s", err)
+        log.Printf("Error fetching all chirps from database: %s", err)
         respondWithError(w, http.StatusInternalServerError, "Something went wrong")
         return
     }
