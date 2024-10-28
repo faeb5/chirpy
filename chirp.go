@@ -2,21 +2,32 @@ package main
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
+	"time"
+
+	"example.com/chirpy/internal/database"
+	"github.com/google/uuid"
 )
 
-func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Body string `json:"body"`
+		Body   string    `json:"body"`
+		UserId uuid.UUID `json:"user_id"`
 	}
-	type returnVals struct {
-		CleanedBody string `json:"cleaned_body"`
+	type returnValues struct {
+		ID        uuid.UUID `json:"id"`
+		CreatedAt time.Time `json:"created_at"`
+		UpdatedAt time.Time `json:"updated_at"`
+		Body      string    `json:"body"`
+		UserID    uuid.UUID `json:"user_id"`
 	}
 
 	var params parameters
-    decoder := json.NewDecoder(r.Body)
+	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&params); err != nil {
+		log.Printf("Error decoding chirp parameters: %s", err)
 		respondWithError(w, http.StatusInternalServerError, "Error decoding JSON")
 		return
 	}
@@ -28,7 +39,23 @@ func handlerValidateChirp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cleanedBody := replaceProfanities(params.Body)
-	respondWithJson(w, http.StatusOK, returnVals{cleanedBody})
+	chirp, err := cfg.dbQueries.CreateChirp(r.Context(), database.CreateChirpParams{
+		UserID: params.UserId,
+		Body:   cleanedBody,
+	})
+
+	if err != nil {
+		log.Printf("Error creating chirp: %s", err)
+		respondWithError(w, http.StatusInternalServerError, "Unable to create chirp")
+	}
+
+	respondWithJson(w, http.StatusCreated, returnValues{
+		ID:        chirp.ID,
+		CreatedAt: chirp.CreatedAt,
+		UpdatedAt: chirp.UpdatedAt,
+		Body:      chirp.Body,
+		UserID:    chirp.UserID,
+	})
 }
 
 func replaceProfanities(text string) string {

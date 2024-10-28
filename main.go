@@ -15,27 +15,27 @@ import (
 
 type apiConfig struct {
 	fileServerHits atomic.Int32
-    dbQueries *database.Queries
-    platform string
+	dbQueries      *database.Queries
+	platform       string
 }
 
 func main() {
 	godotenv.Load()
-    dbURL := os.Getenv("DB_URL")
-    db, err := sql.Open("postgres", dbURL)
-    if err != nil {
-        fmt.Errorf("Failed to connect to database: %s", err)
-    }
-    dbQueries := database.New(db)
-    platform := os.Getenv("PLATFORM")
+	dbURL := os.Getenv("DB_URL")
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		fmt.Errorf("Failed to connect to database: %s", err)
+	}
+	dbQueries := database.New(db)
+	platform := os.Getenv("PLATFORM")
 
 	const port string = "8080"
 	const root string = "."
 
 	apiConfig := apiConfig{
 		fileServerHits: atomic.Int32{},
-        dbQueries: dbQueries,
-        platform: platform,
+		dbQueries:      dbQueries,
+		platform:       platform,
 	}
 
 	mux := http.NewServeMux()
@@ -43,8 +43,8 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", handlerReadiness)
 	mux.HandleFunc("GET /admin/metrics", apiConfig.handlerMetricsShow)
 	mux.HandleFunc("POST /admin/reset", apiConfig.handlerReset)
-	mux.HandleFunc("POST /api/validate_chirp", handlerValidateChirp)
-    mux.HandleFunc("POST /api/users", apiConfig.handlerCreateUser)
+	mux.HandleFunc("POST /api/users", apiConfig.handlerCreateUser)
+	mux.HandleFunc("POST /api/chirps", apiConfig.handlerCreateChirp)
 
 	server := http.Server{
 		Addr:    ":" + port,
