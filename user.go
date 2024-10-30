@@ -11,6 +11,9 @@ import (
 	"github.com/google/uuid"
 )
 
+const tokenExpiresIn time.Duration = time.Hour
+const refreshTokenExpiresIn time.Duration = 60 * 24 * time.Hour
+
 type user struct {
 	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
@@ -64,13 +67,13 @@ func (cfg *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Request) 
 
 func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Password         string `json:"password"`
-		Email            string `json:"email"`
-		ExpiresInSeconds int    `json:"expires_in_seconds"`
+		Password string `json:"password"`
+		Email    string `json:"email"`
 	}
 	type response struct {
 		user
-		Token string `json:"token"`
+		Token        string `json:"token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -93,14 +96,25 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiresIn := time.Hour
-	if params.ExpiresInSeconds > 0 && params.ExpiresInSeconds < 3600 {
-		expiresIn = time.Duration(params.ExpiresInSeconds) * time.Second
-	}
-
-	token, err := auth.MakeJWT(dbUser.ID, cfg.jwtSecret, expiresIn)
+	token, err := auth.MakeJWT(dbUser.ID, cfg.jwtSecret, tokenExpiresIn)
 	if err != nil {
 		log.Printf("Unable to create JWT: %s", err)
+		respondWithError(w, http.StatusInternalServerError, "Something went wrong")
+		return
+	}
+
+	refreshTokenId, err := auth.MakeRefreshToken()
+	if err != nil {
+		log.Printf("Unable to create refresh token: %s", err)
+		respondWithError(w, http.StatusInternalServerError, "Something went wrong")
+		return
+	}
+
+	if _, err := cfg.dbQueries.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
+		UserID:    dbUser.ID,
+		ExpiresAt: time.Now().UTC().Add(refreshTokenExpiresIn),
+	}); err != nil {
+		log.Printf("Unable to create refresh token: %s", err)
 		respondWithError(w, http.StatusInternalServerError, "Something went wrong")
 		return
 	}
@@ -112,6 +126,7 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 			UpdatedAt: dbUser.UpdatedAt,
 			Email:     dbUser.Email,
 		},
-		Token: token,
+		Token:        token,
+		RefreshToken: refreshTokenId,
 	})
 }
