@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const tokenExpiresIn time.Duration = time.Hour
+const accessTokenExpiresIn time.Duration = time.Hour
 const refreshTokenExpiresIn time.Duration = 60 * 24 * time.Hour
 
 type user struct {
@@ -96,14 +96,14 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.MakeJWT(dbUser.ID, cfg.jwtSecret, tokenExpiresIn)
+	accessToken, err := auth.MakeJWT(dbUser.ID, cfg.jwtSecret, accessTokenExpiresIn)
 	if err != nil {
-		log.Printf("Unable to create JWT: %s", err)
+		log.Printf("Unable to create access token: %s", err)
 		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 		return
 	}
 
-	refreshTokenId, err := auth.MakeRefreshToken()
+	refreshToken, err := auth.MakeRefreshToken()
 	if err != nil {
 		log.Printf("Unable to create refresh token: %s", err)
 		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
@@ -111,7 +111,7 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := cfg.dbQueries.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
-		Token:     refreshTokenId,
+		Token:     refreshToken,
 		UserID:    dbUser.ID,
 		ExpiresAt: time.Now().UTC().Add(refreshTokenExpiresIn),
 	}); err != nil {
@@ -127,24 +127,63 @@ func (cfg *apiConfig) handlerLogin(w http.ResponseWriter, r *http.Request) {
 			UpdatedAt: dbUser.UpdatedAt,
 			Email:     dbUser.Email,
 		},
-		Token:        token,
-		RefreshToken: refreshTokenId,
+		Token:        accessToken,
+		RefreshToken: refreshToken,
 	})
 }
 
-func (cfg *apiConfig) handlerRevoke(w http.ResponseWriter, r *http.Request) {
-	bearerToken, err := auth.GetBearerToken(r.Header)
+func (cfg *apiConfig) handlerRevokeRefreshToken(w http.ResponseWriter, r *http.Request) {
+	bearer, err := auth.GetBearerToken(r.Header)
 	if err != nil {
 		log.Printf("Unable to fetch bearer token: %s", err)
 		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 		return
 	}
 
-	if err := cfg.dbQueries.RevokeRefreshToken(r.Context(), bearerToken); err != nil {
+	if err := cfg.dbQueries.RevokeRefreshToken(r.Context(), bearer); err != nil {
 		log.Printf("Unable to revoke refresh token: %s", err)
 		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (cfg *apiConfig) handlerUpdateRefreshToken(w http.ResponseWriter, r *http.Request) {
+	type response struct {
+		Token string `json:"token"`
+	}
+
+	bearer, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("Unable to fetch bearer token: %s", err)
+		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
+		return
+	}
+
+	refreshToken, err := cfg.dbQueries.GetRefreshToken(r.Context(), bearer)
+	if err != nil {
+		log.Printf("Unable to fetch refresh token: %s", err)
+		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
+		return
+	}
+
+	if refreshToken.ExpiresAt.UTC().Before(time.Now().UTC()) {
+		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
+		return
+	}
+
+	if refreshToken.RevokedAt.Valid && refreshToken.RevokedAt.Time.UTC().Before(time.Now().UTC()) {
+		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
+		return
+	}
+
+	newAccessToken, err := auth.MakeJWT(refreshToken.UserID, cfg.jwtSecret, accessTokenExpiresIn)
+	if err != nil {
+		log.Printf("Unable to create new access token: %s", err)
+		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		return
+	}
+
+	respondWithJson(w, http.StatusOK, response{newAccessToken})
 }
