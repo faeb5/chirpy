@@ -17,17 +17,35 @@ type apiConfig struct {
 	fileServerHits atomic.Int32
 	dbQueries      *database.Queries
 	platform       string
+	jwtSecret      string
 }
 
 func main() {
 	godotenv.Load()
+
 	dbURL := os.Getenv("DB_URL")
+	if dbURL == "" {
+		fmt.Print("Unable to load DB_URL")
+		return
+	}
+
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
-        log.Printf("Failed to connect to database: %s", err)
+		log.Printf("Failed to connect to database: %s", err)
 	}
 	dbQueries := database.New(db)
+
 	platform := os.Getenv("PLATFORM")
+	if platform == "" {
+		fmt.Println("Unable to load PLATFORM")
+		return
+	}
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		fmt.Println("Unable to load JWT_SECRET")
+		return
+	}
 
 	const port string = "8080"
 	const root string = "."
@@ -36,6 +54,7 @@ func main() {
 		fileServerHits: atomic.Int32{},
 		dbQueries:      dbQueries,
 		platform:       platform,
+		jwtSecret:      jwtSecret,
 	}
 
 	mux := http.NewServeMux()
@@ -46,8 +65,8 @@ func main() {
 	mux.HandleFunc("POST /api/users", apiConfig.handlerCreateUser)
 	mux.HandleFunc("POST /api/chirps", apiConfig.handlerCreateChirp)
 	mux.HandleFunc("GET /api/chirps", apiConfig.handlerGetAllChirps)
-    mux.HandleFunc("GET /api/chirps/{chirpID}", apiConfig.handlerGetChirp)
-    mux.HandleFunc("POST /api/login", apiConfig.handlerLogin)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", apiConfig.handlerGetChirp)
+	mux.HandleFunc("POST /api/login", apiConfig.handlerLogin)
 
 	server := http.Server{
 		Addr:    ":" + port,

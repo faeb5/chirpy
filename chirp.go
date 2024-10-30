@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"example.com/chirpy/internal/auth"
 	"example.com/chirpy/internal/database"
 	"github.com/google/uuid"
 )
@@ -20,44 +21,78 @@ type chirp struct {
 }
 
 func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
-    chirpId, err := uuid.Parse(r.PathValue("chirpID"))
-    if err != nil {
-        log.Print("Chirp not found")
-        respondWithError(w, http.StatusNotFound, "Chirp not found")
-        return
-    }
+	type response struct {
+		chirp
+	}
 
-    dbChirp, err := cfg.dbQueries.GetChirp(r.Context(), chirpId)
-    if err != nil {
-        log.Printf("Error fetching chirp from database: %s", err)
-        respondWithError(w, http.StatusInternalServerError, "Something went wrong")
-        return
-    }
+	chirpId, err := uuid.Parse(r.PathValue("chirpID"))
+	if err != nil {
+		log.Print("Chirp not found")
+		respondWithError(w, http.StatusNotFound, "Chirp not found")
+		return
+	}
 
-    respondWithJson(w, http.StatusOK, convertDatabaseChirp(dbChirp))
+	dbChirp, err := cfg.dbQueries.GetChirp(r.Context(), chirpId)
+	if err != nil {
+		log.Printf("Error fetching chirp from database: %s", err)
+		respondWithError(w, http.StatusInternalServerError, "Something went wrong")
+		return
+	}
+
+	respondWithJson(w, http.StatusOK, response{
+		chirp: chirp{
+			ID:        dbChirp.ID,
+			CreatedAt: dbChirp.CreatedAt,
+			UpdatedAt: dbChirp.UpdatedAt,
+			Body:      dbChirp.Body,
+			UserID:    dbChirp.UserID,
+		},
+	})
 }
 
 func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request) {
-    dbChirps, err := cfg.dbQueries.GetAllChirps(r.Context())
-    if err != nil {
-        log.Printf("Error fetching all chirps from database: %s", err)
-        respondWithError(w, http.StatusInternalServerError, "Something went wrong")
-        return
-    }
+	dbChirps, err := cfg.dbQueries.GetAllChirps(r.Context())
+	if err != nil {
+		log.Printf("Error fetching all chirps from database: %s", err)
+		respondWithError(w, http.StatusInternalServerError, "Something went wrong")
+		return
+	}
 
-    var chirps []chirp
-    for _, dbChirp := range dbChirps {
-        chirp := convertDatabaseChirp(dbChirp)
-        chirps = append(chirps, chirp)
-    }
+	chirps := []chirp{}
+	for _, dbChirp := range dbChirps {
+		chirp := chirp{
+			ID:        dbChirp.ID,
+			CreatedAt: dbChirp.CreatedAt,
+			UpdatedAt: dbChirp.UpdatedAt,
+			Body:      dbChirp.Body,
+			UserID:    dbChirp.UserID,
+		}
+		chirps = append(chirps, chirp)
+	}
 
 	respondWithJson(w, http.StatusOK, chirps)
 }
 
 func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Body   string    `json:"body"`
-		UserId uuid.UUID `json:"user_id"`
+		Body string `json:"body"`
+	}
+	type response struct {
+		chirp
+	}
+
+	bearerToken, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		log.Printf("Unable to fetch bearer token: %s", err)
+		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
+		return
+	}
+
+	userId, err := auth.ValidateJWT(bearerToken, cfg.jwtSecret)
+	if err != nil {
+		log.Printf("Invalid token: %s", err)
+		respondWithError(w, http.StatusUnauthorized, http.StatusText(http.StatusUnauthorized))
+		return
 	}
 
 	var params parameters
@@ -76,7 +111,7 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 
 	cleanedBody := replaceProfanities(params.Body)
 	dbChirp, err := cfg.dbQueries.CreateChirp(r.Context(), database.CreateChirpParams{
-		UserID: params.UserId,
+		UserID: userId,
 		Body:   cleanedBody,
 	})
 
@@ -85,8 +120,15 @@ func (cfg *apiConfig) handlerCreateChirp(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusInternalServerError, "Unable to create chirp")
 	}
 
-    chirp := convertDatabaseChirp(dbChirp)
-	respondWithJson(w, http.StatusCreated, chirp)
+	respondWithJson(w, http.StatusCreated, response{
+		chirp: chirp{
+			ID:        dbChirp.ID,
+			CreatedAt: dbChirp.CreatedAt,
+			UpdatedAt: dbChirp.UpdatedAt,
+			Body:      dbChirp.Body,
+			UserID:    dbChirp.UserID,
+		},
+	})
 }
 
 func replaceProfanities(text string) string {
@@ -103,14 +145,4 @@ func replaceProfanities(text string) string {
 		}
 	}
 	return strings.Join(textFields, " ")
-}
-
-func convertDatabaseChirp(dbChirp database.Chirp) chirp {
-    return chirp{
-		ID:        dbChirp.ID,
-		CreatedAt: dbChirp.CreatedAt,
-		UpdatedAt: dbChirp.UpdatedAt,
-		Body:      dbChirp.Body,
-		UserID:    dbChirp.UserID,
-	}
 }
