@@ -1,9 +1,10 @@
 -- name: CreateUser :one
-INSERT INTO users (id, created_at, updated_at, email, hashed_password)
+INSERT INTO users (id, created_at, updated_at, is_chirpy_red, email, hashed_password)
 VALUES (
     gen_random_uuid(),
     NOW(),
     NOW(),
+    false,
     $1,
     $2
 )
@@ -22,3 +23,9 @@ UPDATE users SET
     updated_at = NOW()
 WHERE id = $3
 RETURNING *;
+
+-- name: EnableChirpyRed :exec
+UPDATE users SET
+    is_chirpy_red = true,
+    updated_at = NOW()
+WHERE id = $1;

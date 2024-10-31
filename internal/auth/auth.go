@@ -74,26 +74,34 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 }
 
 func GetBearerToken(headers http.Header) (string, error) {
+	return getValueFromAuthorizationHeader(headers, "Bearer")
+}
+
+func GetAPIKey(headers http.Header) (string, error) {
+	return getValueFromAuthorizationHeader(headers, "ApiKey")
+}
+
+func getValueFromAuthorizationHeader(headers http.Header, key string) (string, error) {
 	authHeader, ok := headers["Authorization"]
 	if !ok {
 		return "", fmt.Errorf("Authorization header not found")
 	}
 
-	var bearer string
+	var keyValue string
 	for _, val := range authHeader {
 		fields := strings.Fields(val)
 		if len(fields) != 2 {
 			continue
 		}
-		if strings.ToLower(fields[0]) == "bearer" {
-			bearer = fields[1]
+		if strings.ToLower(fields[0]) == strings.ToLower(key) {
+			keyValue = fields[1]
 		}
 	}
-	if bearer == "" {
-		return "", fmt.Errorf("Bearer not found")
+	if keyValue == "" {
+		return "", fmt.Errorf("No value for key %s not found", key)
 	}
 
-	return bearer, nil
+	return keyValue, nil
 }
 
 func MakeRefreshToken() (string, error) {

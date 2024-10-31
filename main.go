@@ -18,6 +18,7 @@ type apiConfig struct {
 	dbQueries      *database.Queries
 	platform       string
 	jwtSecret      string
+	polkaKey       string
 }
 
 func main() {
@@ -47,6 +48,12 @@ func main() {
 		return
 	}
 
+	polkaKey := os.Getenv("POLKA_KEY")
+	if polkaKey == "" {
+		fmt.Println("Unable to load Polka Key")
+		return
+	}
+
 	const port string = "8080"
 	const root string = "."
 
@@ -55,6 +62,7 @@ func main() {
 		dbQueries:      dbQueries,
 		platform:       platform,
 		jwtSecret:      jwtSecret,
+		polkaKey:       polkaKey,
 	}
 
 	mux := http.NewServeMux()
@@ -71,6 +79,7 @@ func main() {
 	mux.HandleFunc("POST /api/login", apiConfig.handlerLogin)
 	mux.HandleFunc("POST /api/revoke", apiConfig.handlerRevokeRefreshToken)
 	mux.HandleFunc("POST /api/refresh", apiConfig.handlerUpdateRefreshToken)
+	mux.HandleFunc("POST /api/polka/webhooks", apiConfig.handlerEnableChirpyRed)
 
 	server := http.Server{
 		Addr:    ":" + port,

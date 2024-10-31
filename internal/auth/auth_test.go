@@ -161,3 +161,56 @@ func TestGetBearerToken(t *testing.T) {
 		})
 	}
 }
+
+func TestGetApiKey(t *testing.T) {
+	apiKey := "mysupersecretapikey"
+	bearer := fmt.Sprintf("ApiKey %s", apiKey)
+	headers := http.Header{
+		"Authorization": []string{bearer},
+	}
+
+	tests := []struct {
+		name       string
+		headers    http.Header
+		wantApiKey string
+		wantErr    bool
+	}{
+		{
+			name:       "ApiKey found",
+			headers:    headers,
+			wantApiKey: apiKey,
+			wantErr:    false,
+		},
+		{
+			name:       "Authorization header not found",
+			headers:    http.Header{},
+			wantApiKey: "",
+			wantErr:    true,
+		},
+		{
+			name:       "ApiKey not found",
+			headers:    http.Header{"Authorization": []string{}},
+			wantApiKey: "",
+			wantErr:    true,
+		},
+		{
+			name:       "Invalid ApiKey",
+			headers:    http.Header{"Authorization": []string{"TotallyWrongApiKey key"}},
+			wantApiKey: "",
+			wantErr:    true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			apiKey, err := GetAPIKey(test.headers)
+			if apiKey != test.wantApiKey {
+				t.Errorf("GetAPIKey() string = %v, want %v", apiKey, test.wantApiKey)
+			}
+			if (err != nil) != test.wantErr {
+				t.Errorf("GetAPIKey() err = %v, want %v", err, test.wantErr)
+			}
+		})
+	}
+
+}
