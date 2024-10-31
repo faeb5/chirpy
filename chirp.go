@@ -51,11 +51,30 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request) {
-	dbChirps, err := cfg.dbQueries.GetAllChirps(r.Context())
-	if err != nil {
-		log.Printf("Error fetching all chirps from database: %s", err)
-		respondWithError(w, http.StatusInternalServerError, "Something went wrong")
-		return
+	var dbChirps []database.Chirp
+	authorId := r.URL.Query().Get("author_id")
+	if authorId != "" {
+		userId, err := uuid.Parse(authorId)
+		if err != nil {
+            log.Printf("Unable to parse author ID into UUID: %s", err)
+			respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+			return
+		}
+		dbChirpsByUser, err := cfg.dbQueries.GetAllChirpsByUserId(r.Context(), userId)
+		if err != nil {
+			log.Printf("Unable to fetch chirps from database: %s", err)
+			respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+			return
+		}
+		dbChirps = append(dbChirps, dbChirpsByUser...)
+	} else {
+		allDbChirps, err := cfg.dbQueries.GetAllChirps(r.Context())
+		if err != nil {
+			log.Printf("Unable to fetch chirps from database: %s", err)
+			respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+			return
+		}
+		dbChirps = append(dbChirps, allDbChirps...)
 	}
 
 	chirps := []chirp{}
