@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -51,34 +52,29 @@ func (cfg *apiConfig) handlerGetChirp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request) {
-	var dbChirps []database.Chirp
-	authorId := r.URL.Query().Get("author_id")
-	if authorId != "" {
-		userId, err := uuid.Parse(authorId)
+	dbChirps, err := cfg.dbQueries.GetAllChirps(r.Context())
+	if err != nil {
+		log.Printf("Unable to fetch chirps from database: %s", err)
+		respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		return
+	}
+
+	authorId := uuid.Nil
+	authorIdParam := r.URL.Query().Get("author_id")
+	if authorIdParam != "" {
+		authorId, err = uuid.Parse(authorIdParam)
 		if err != nil {
-            log.Printf("Unable to parse author ID into UUID: %s", err)
+			log.Printf("Unable to parse author ID into UUID: %s", err)
 			respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 			return
 		}
-		dbChirpsByUser, err := cfg.dbQueries.GetAllChirpsByUserId(r.Context(), userId)
-		if err != nil {
-			log.Printf("Unable to fetch chirps from database: %s", err)
-			respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-			return
-		}
-		dbChirps = append(dbChirps, dbChirpsByUser...)
-	} else {
-		allDbChirps, err := cfg.dbQueries.GetAllChirps(r.Context())
-		if err != nil {
-			log.Printf("Unable to fetch chirps from database: %s", err)
-			respondWithError(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
-			return
-		}
-		dbChirps = append(dbChirps, allDbChirps...)
 	}
 
 	chirps := []chirp{}
 	for _, dbChirp := range dbChirps {
+		if authorId != uuid.Nil && authorId != dbChirp.UserID {
+			continue
+		}
 		chirp := chirp{
 			ID:        dbChirp.ID,
 			CreatedAt: dbChirp.CreatedAt,
@@ -88,6 +84,19 @@ func (cfg *apiConfig) handlerGetAllChirps(w http.ResponseWriter, r *http.Request
 		}
 		chirps = append(chirps, chirp)
 	}
+
+	sortType := "asc"
+	sortParam := r.URL.Query().Get("sort")
+	if sortParam == "desc" {
+		sortType = "desc"
+	}
+
+	sort.Slice(chirps, func(i, j int) bool {
+		if sortType == "desc" {
+			return chirps[i].CreatedAt.After(chirps[j].CreatedAt)
+		}
+		return chirps[i].CreatedAt.Before(chirps[j].CreatedAt)
+	})
 
 	respondWithJson(w, http.StatusOK, chirps)
 }
