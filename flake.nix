@@ -2,7 +2,7 @@
   description = "Boot.dev flake";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-24.05";
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
   };
 
   outputs = {
@@ -15,7 +15,7 @@
     packages.x86_64-linux.bootdev = with pkgs; callPackage ./bootdev.nix {};
     packages.x86_64-linux.default = self.packages.x86_64-linux.bootdev;
     devShells.x86_64-linux.default = pkgs.mkShellNoCC {
-      nativeBuildInputs = with pkgs; [go];
+      nativeBuildInputs = with pkgs; [go_1_23];
       packages = with pkgs; [sqlc goose postgresql jq gh gopls self.packages.x86_64-linux.bootdev];
       shellHook = ''echo "Welcome to the Boot.dev environment"'';
     };
